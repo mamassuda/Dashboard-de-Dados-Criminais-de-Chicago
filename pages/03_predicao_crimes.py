@@ -1,0 +1,500 @@
+# 03_predicao_crimes.py - AMBOS MODELOS COM DADOS DIÁRIOS
+import streamlit as st
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from sklearn.metrics import mean_absolute_error, mean_squared_error, mean_absolute_percentage_error
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.preprocessing import StandardScaler
+import holidays
+from datetime import timedelta
+
+# Configuração da página
+st.set_page_config(page_title="Predição Crimes", layout="wide")
+
+# Título e navegação
+st.title("🔮 Predição Crimes")
+if st.button("← Voltar ao Início"):
+    st.switch_page("app.py")
+
+# Carregar dados
+@st.cache_data
+def load_data():
+    try:
+        df = pd.read_csv("dados_chicago_filtrados.csv")
+        if 'Date' in df.columns:
+            df['Date'] = pd.to_datetime(df['Date'])
+        return df
+    except Exception as e:
+        st.error(f"Erro ao carregar dados: {e}")
+        return pd.DataFrame()
+
+df = load_data()
+
+if df.empty:
+    st.warning("Dados não carregados. Verifique o arquivo.")
+    st.stop()
+
+# Sidebar - Seleção do modelo
+st.sidebar.header("🤖 Escolha do Modelo")
+modelo_selecionado = st.sidebar.radio(
+    "Selecione o modelo:",
+    ["Prophet", "Random Forest"],
+    help="Ambos modelos usarão dados DIÁRIOS para comparação justa"
+)
+
+# Filtros comuns
+crime_types = sorted(df['Primary Type'].unique())
+selected_crime = st.sidebar.selectbox(
+    "Tipo de Crime", 
+    crime_types,
+    index=crime_types.index('ASSAULT') if 'ASSAULT' in crime_types else 0
+)
+
+available_years = sorted(df['Year'].unique())
+
+# CONFIGURAÇÕES PARA AMBOS OS MODELOS (DIÁRIOS) - CORRIGIDO
+st.sidebar.header("📅 Configurações Temporais")
+
+# Ordenar anos disponíveis
+available_years_sorted = sorted(available_years)
+
+# Selecionar intervalo de treino
+if len(available_years_sorted) >= 2:
+    train_start = st.sidebar.selectbox(
+        "Início do Treino", 
+        available_years_sorted[:-1],
+        index=0
+    )
+    
+    train_end = st.sidebar.selectbox(
+        "Fim do Treino", 
+        [y for y in available_years_sorted if y > train_start],
+        index=0
+    )
+    
+    train_years = list(range(train_start, train_end + 1))
+    
+    # Ano de teste (após o treino)
+    available_test_years = [y for y in available_years_sorted if y > train_end]
+    test_year = st.sidebar.selectbox(
+        "Ano para Teste", 
+        available_test_years
+    )
+else:
+    st.warning("Não há anos suficientes para treino e teste")
+    st.stop()
+
+# Configurações específicas por modelo
+if modelo_selecionado == "Prophet":
+    seasonality_mode = st.sidebar.radio("Modo Sazonalidade", ["multiplicative", "additive"])
+    include_holidays = st.sidebar.checkbox("Incluir Feriados", value=True)
+
+else:  # Random Forest
+    st.sidebar.header("🔧 Parâmetros Random Forest")
+    n_estimators = st.sidebar.slider("Número de Árvores", 50, 500, 200)
+    lags_dias = st.sidebar.slider("Lags (dias históricos)", 7, 90, 30)
+    include_weekends = st.sidebar.checkbox("Incluir Features de Fim de Semana", value=True)
+
+# VERIFICAÇÃO DE SEGURANÇA - CORRIGIDO
+if not train_years or not test_year:
+    st.info("Selecione anos para treino e teste para continuar.")
+    st.stop()
+
+# Verificar se há sobreposição de anos
+anos_treino_set = set(train_years)
+if test_year in anos_treino_set:
+    st.error("❌ O ano de teste não pode estar nos anos de treino!")
+    st.stop()
+
+# Verificar se há dados suficientes
+df_filtered = df[(df['Primary Type'] == selected_crime) & 
+                 (df['Year'].isin(train_years + [test_year]))]
+
+if df_filtered.empty:
+    st.error("❌ Não há dados para os anos selecionados!")
+    st.stop()
+
+st.sidebar.success(f"✅ Dados carregados: {len(df_filtered)} registros")
+st.sidebar.write(f"📊 Período: {df_filtered['Date'].min().strftime('%Y-%m-%d')} a {df_filtered['Date'].max().strftime('%Y-%m-%d')}")
+
+# FUNÇÃO CORRIGIDA: Preparar e dividir dados
+def preparar_e_dividir_dados(df_filtrado, train_years, test_year):
+    """Prepara dados diários e divide corretamente"""
+    dados_diarios = df_filtrado.resample('D', on='Date').size().reset_index()
+    dados_diarios.columns = ['ds', 'y']
+    
+    # Usar o final do último ano de treino como corte
+    ultimo_ano_treino = max(train_years)
+    data_corte = f"{ultimo_ano_treino}-12-31"
+    data_corte = pd.to_datetime(data_corte)
+    
+    dados_treino = dados_diarios[dados_diarios['ds'] <= data_corte]
+    dados_teste = dados_diarios[dados_diarios['ds'] > data_corte]
+    
+    return dados_treino, dados_teste, data_corte
+
+# PREPARAR DADOS DIÁRIOS (PARA AMBOS OS MODELOS) - CORRIGIDO
+def preparar_dados_diarios(df_filtrado):
+    """Prepara dados diários para ambos os modelos"""
+    dados_diarios = df_filtrado.resample('D', on='Date').size().reset_index()
+    dados_diarios.columns = ['ds', 'y']
+    return dados_diarios
+
+# Botão para executar previsão
+if st.button(f"🚀 Executar {modelo_selecionado} (Dados Diários)", type="primary"):
+    
+    # Preparar dados (COMUM A AMBOS) - CORRIGIDO
+    dados_treino, dados_teste, data_corte = preparar_e_dividir_dados(df_filtered, train_years, test_year)
+    
+    # Verificar se as divisões não estão vazias
+    if len(dados_treino) == 0:
+        st.error("❌ Nenhum dado encontrado para o período de treino!")
+        st.stop()
+
+    if len(dados_teste) == 0:
+        st.error("❌ Nenhum dado encontrado para o período de teste!")
+        st.stop()
+    
+    st.write(f"📅 Dados Diários - Treino: {len(dados_treino)} dias | Teste: {len(dados_teste)} dias")
+    st.write(f"📊 Corte temporal: {data_corte.strftime('%Y-%m-%d')}")
+    
+    if modelo_selecionado == "Prophet":
+        with st.spinner("Treinando modelo Prophet..."):
+            try:
+                from prophet import Prophet
+                
+                # Configurar o modelo Prophet
+                model = Prophet(
+                    seasonality_mode=seasonality_mode,
+                    yearly_seasonality=True,
+                    weekly_seasonality=True,
+                    daily_seasonality=False
+                )
+                
+                # Adicionar feriados se selecionado
+                if include_holidays:
+                    model.add_country_holidays(country_name='US')
+                
+                # Treinar o modelo
+                model.fit(dados_treino)
+                
+                # Criar dataframe futuro para previsão
+                future = model.make_future_dataframe(periods=len(dados_teste), freq='D')
+                forecast = model.predict(future)
+                
+                # Combinar previsões com dados reais
+                forecast_test = forecast[forecast['ds'] >= data_corte][['ds', 'yhat', 'yhat_lower', 'yhat_upper']]
+                resultados = pd.merge(dados_teste, forecast_test, on='ds', how='left')
+                
+                # Calcular métricas
+                mape = mean_absolute_percentage_error(resultados['y'], resultados['yhat']) * 100
+                mae = mean_absolute_error(resultados['y'], resultados['yhat'])
+                mse = mean_squared_error(resultados['y'], resultados['yhat'])
+                rmse = np.sqrt(mse)
+                
+                # Exibir métricas
+                st.success("✅ Previsão Prophet concluída!")
+                
+                col1, col2, col3, col4 = st.columns(4)
+                col1.metric("MAPE", f"{mape:.2f}%")
+                col2.metric("MAE", f"{mae:.2f}")
+                col3.metric("MSE", f"{mse:.2f}")
+                col4.metric("RMSE", f"{rmse:.2f}")
+                
+                # Gráfico comparativo
+                st.subheader("📊 Comparação: Previsão vs Real")
+                
+                fig = go.Figure()
+                
+                # Dados de treino
+                fig.add_trace(go.Scatter(
+                    x=dados_treino['ds'], y=dados_treino['y'],
+                    mode='lines', name='Treino',
+                    line=dict(color='blue', width=1),
+                    opacity=0.7
+                ))
+                
+                # Dados reais de teste
+                fig.add_trace(go.Scatter(
+                    x=resultados['ds'], y=resultados['y'],
+                    mode='lines', name='Real (Teste)',
+                    line=dict(color='green', width=2)
+                ))
+                
+                # Previsões
+                fig.add_trace(go.Scatter(
+                    x=resultados['ds'], y=resultados['yhat'],
+                    mode='lines', name=f'Prophet (MAPE: {mape:.1f}%)',
+                    line=dict(color='red', width=2, dash='dash')
+                ))
+                
+                # Intervalo de confiança
+                fig.add_trace(go.Scatter(
+                    x=resultados['ds'], y=resultados['yhat_upper'],
+                    mode='lines', name='Intervalo Superior',
+                    line=dict(color='red', width=1, dash='dot'),
+                    opacity=0.3
+                ))
+                
+                fig.add_trace(go.Scatter(
+                    x=resultados['ds'], y=resultados['yhat_lower'],
+                    mode='lines', name='Intervalo Inferior',
+                    line=dict(color='red', width=1, dash='dot'),
+                    opacity=0.3,
+                    fill='tonexty'
+                ))
+                
+                fig.update_layout(
+                    title=f'Previsão Diária de {selected_crime} - Prophet ({test_year})',
+                    xaxis_title='Data',
+                    yaxis_title='Número de Crimes por Dia',
+                    hovermode='x unified',
+                    height=500
+                )
+                
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Componentes do Prophet
+                st.subheader("🔍 Componentes do Modelo Prophet")
+                
+                try:
+                    fig_components = model.plot_components(forecast)
+                    st.pyplot(fig_components)
+                except:
+                    st.info("Visualização de componentes não disponível para esta configuração")
+                
+            except Exception as e:
+                st.error(f"Erro no Prophet: {e}")
+                
+    else:  # RANDOM FOREST COM DADOS DIÁRIOS
+        with st.spinner("Treinando Random Forest (dados diários)..."):
+            try:
+                # 1. Preparar dados diários para Random Forest
+                df_rf = pd.concat([dados_treino, dados_teste]).set_index('ds')
+                df_rf = df_rf.sort_index()
+
+                # 2. Função para criar features DIÁRIAS
+                def criar_features_diarias_sklearn(df, lags_dias=30):
+                    """Cria features temporais DIÁRIAS para scikit-learn"""
+                    
+                    df_features = df.copy()
+                    
+                    # Features básicas de tempo DIÁRIAS
+                    df_features['day_of_week'] = df_features.index.dayofweek
+                    df_features['day_of_month'] = df_features.index.day
+                    df_features['month'] = df_features.index.month
+                    df_features['year'] = df_features.index.year
+                    df_features['quarter'] = df_features.index.quarter
+                    df_features['week_of_year'] = df_features.index.isocalendar().week
+                    
+                    # Fim de semana
+                    df_features['is_weekend'] = (df_features.index.dayofweek >= 5).astype(int)
+                    
+                    # Feriados (agora diários)
+                    us_holidays = holidays.US()
+                    df_features['is_holiday'] = [date in us_holidays for date in df_features.index]
+                    df_features['is_holiday'] = df_features['is_holiday'].astype(int)
+                    
+                    # Estações do ano
+                    def get_season(month):
+                        if month in [12, 1, 2]: return 0  # Inverno
+                        elif month in [3, 4, 5]: return 1  # Primavera
+                        elif month in [6, 7, 8]: return 2  # Verão
+                        else: return 3  # Outono
+                    
+                    df_features['season'] = df_features.index.month.map(get_season)
+                    
+                    # Final de ano
+                    df_features['is_year_end'] = df_features.index.month.isin([11, 12]).astype(int)
+                    
+                    # Lags DIÁRIOS
+                    for lag in range(1, lags_dias + 1):
+                        df_features[f'lag_{lag}d'] = df_features['y'].shift(lag)
+                    
+                    # Médias móveis DIÁRIAS
+                    df_features['rolling_mean_7d'] = df_features['y'].rolling(window=7).mean()
+                    df_features['rolling_mean_30d'] = df_features['y'].rolling(window=30).mean()
+                    
+                    return df_features
+
+                # Criar features diárias
+                crimes_com_features = criar_features_diarias_sklearn(df_rf, lags_dias)
+                
+                # Remover linhas com NaN (devido aos lags)
+                crimes_com_features = crimes_com_features.dropna()
+                
+                st.write(f"📈 Features diárias criadas: {len(crimes_com_features.columns) - 1} variáveis")
+
+                # 3. Split treino/teste (já temos as datas)
+                train = crimes_com_features[crimes_com_features.index <= data_corte]
+                test = crimes_com_features[crimes_com_features.index > data_corte]
+
+                if len(train) == 0 or len(test) == 0:
+                    st.error("Não há dados suficientes para treino e teste com o período selecionado.")
+                    st.stop()
+
+                st.write(f"🎯 Treino: {len(train)} dias | Teste: {len(test)} dias")
+
+                # 4. Preparar features e target
+                feature_columns = [col for col in crimes_com_features.columns if col != 'y']
+                X_train = train[feature_columns]
+                y_train = train['y']
+                X_test = test[feature_columns]
+                y_test = test['y']
+
+                # 5. Normalizar features
+                scaler = StandardScaler()
+                X_train_scaled = scaler.fit_transform(X_train)
+                X_test_scaled = scaler.transform(X_test)
+
+                # 6. Modelo Random Forest
+                model_rf = RandomForestRegressor(
+                    n_estimators=n_estimators,
+                    random_state=42,
+                    n_jobs=-1
+                )
+
+                model_rf.fit(X_train_scaled, y_train)
+
+                # 7. Previsões
+                y_pred = model_rf.predict(X_test_scaled)
+
+                # 8. Métricas
+                mape_rf = mean_absolute_percentage_error(y_test, y_pred) * 100
+                mae_rf = mean_absolute_error(y_test, y_pred)
+                mse_rf = mean_squared_error(y_test, y_pred)
+                rmse_rf = np.sqrt(mse_rf)
+
+                # Exibir métricas
+                st.success("✅ Previsão Random Forest (Diária) concluída!")
+                
+                col1, col2, col3, col4 = st.columns(4)
+                col1.metric("MAPE", f"{mape_rf:.2f}%")
+                col2.metric("MAE", f"{mae_rf:.2f}")
+                col3.metric("MSE", f"{mse_rf:.2f}")
+                col4.metric("RMSE", f"{rmse_rf:.2f}")
+
+                # 9. Gráfico comparativo DIÁRIO
+                st.subheader("📊 Comparação Diária: Previsão vs Real")
+                
+                results_df = pd.DataFrame({
+                    'Real': y_test,
+                    'Previsao': y_pred
+                }, index=y_test.index)
+
+                fig = go.Figure()
+                
+                # Treino
+                fig.add_trace(go.Scatter(
+                    x=train.index, y=train['y'],
+                    mode='lines', name='Treino',
+                    line=dict(color='blue', width=1),
+                    opacity=0.7
+                ))
+                
+                # Teste Real
+                fig.add_trace(go.Scatter(
+                    x=results_df.index, y=results_df['Real'],
+                    mode='lines', name='Real (Teste)',
+                    line=dict(color='green', width=2)
+                ))
+                
+                # Previsão
+                fig.add_trace(go.Scatter(
+                    x=results_df.index, y=results_df['Previsao'],
+                    mode='lines', name=f'Random Forest (MAPE: {mape_rf:.1f}%)',
+                    line=dict(color='red', width=2, dash='dash')
+                ))
+                
+                fig.update_layout(
+                    title=f'Previsão Diária de {selected_crime} - Random Forest ({test_year})',
+                    xaxis_title='Data',
+                    yaxis_title='Número de Crimes por Dia',
+                    hovermode='x unified',
+                    height=500
+                )
+                
+                st.plotly_chart(fig, use_container_width=True)
+
+                # 10. Tabela de comparação (amostra de 15 dias)
+                st.subheader("📈 Amostra de Previsões Diárias")
+                
+                comparacao = pd.DataFrame({
+                    'Data': results_df.index.strftime('%Y-%m-%d'),
+                    'Real': results_df['Real'],
+                    'Previsto': results_df['Previsao'],
+                    'Erro_Absoluto': np.abs(results_df['Real'] - results_df['Previsao']),
+                    'Erro_Percentual': (np.abs(results_df['Real'] - results_df['Previsao']) / results_df['Real']) * 100
+                }).head(15)  # Mostrar apenas 15 primeiros dias
+
+                st.dataframe(comparacao.round(2), use_container_width=True)
+
+                # 11. Estatísticas de performance
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Erro Médio Absoluto", f"{comparacao['Erro_Absoluto'].mean():.1f} crimes/dia")
+                with col2:
+                    st.metric("Melhor Dia", f"{comparacao.loc[comparacao['Erro_Percentual'].idxmin(), 'Data']} ({comparacao['Erro_Percentual'].min():.1f}%)")
+                with col3:
+                    st.metric("Desvio Padrão Erro", f"{comparacao['Erro_Absoluto'].std():.1f}")
+
+                # 12. Importância das Features (top 10)
+                st.subheader("🔍 Top 10 Features Mais Importantes")
+                
+                feature_importance = pd.DataFrame({
+                    'feature': feature_columns,
+                    'importance': model_rf.feature_importances_
+                }).sort_values('importance', ascending=False).head(10)
+
+                fig_importance = go.Figure()
+                fig_importance.add_trace(go.Bar(
+                    x=feature_importance['importance'],
+                    y=feature_importance['feature'],
+                    orientation='h'
+                ))
+                fig_importance.update_layout(
+                    title='Top 10 Features Mais Importantes (Dados Diários)',
+                    xaxis_title='Importância',
+                    yaxis_title='Features',
+                    height=400
+                )
+                st.plotly_chart(fig_importance, use_container_width=True)
+
+            except Exception as e:
+                st.error(f"Erro no Random Forest: {e}")
+
+else:
+    # Tela inicial - informações sobre os modelos
+    st.markdown(f"""
+    ### 📋 Comparação Justa: Ambos Modelos com Dados Diários
+    
+    Agora **Prophet** e **Random Forest** usam a mesma granularidade temporal:
+    
+    - ✅ **Dados diários** para ambos os modelos
+    - ✅ **Mesmo período** de treino e teste  
+    - ✅ **Métricas comparáveis** (MAPE, MAE, RMSE)
+    - ✅ **Visualização consistente**
+    
+    **Configuração Temporal:**
+    - Treino: {min(train_years)} a {max(train_years)}
+    - Teste: {test_year}
+    """)
+    
+    if modelo_selecionado == "Prophet":
+        st.markdown("""
+        **Prophet (Diário):**
+        - Sazonalidade automática diária/semanal/anual
+        - Feriados e eventos especiais
+        - Ideal para padrões complexos e tendências
+        """)
+    else:
+        st.markdown("""
+        **Random Forest (Diário):**
+        - Features temporais diárias (dia da semana, feriados, etc.)
+        - Lags históricos em dias
+        - Médias móveis de 7 e 30 dias
+        - Identifica padrões não-lineares complexos
+        """)
