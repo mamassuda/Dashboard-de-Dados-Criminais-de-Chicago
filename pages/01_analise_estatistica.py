@@ -6,7 +6,7 @@ from datetime import datetime
 
 @st.cache_data
 def load_data():
-    df = pd.read_csv("dados_chicago_filtrados.csv")
+    df = pd.read_csv("chicago_crimes.csv")
     # Converter coluna de datas
     df['Date'] = pd.to_datetime(df['Date'])
     return df

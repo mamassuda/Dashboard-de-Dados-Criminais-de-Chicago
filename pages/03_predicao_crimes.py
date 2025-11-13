@@ -23,7 +23,7 @@ if st.button("← Voltar ao Início"):
 @st.cache_data
 def load_data():
     try:
-        df = pd.read_csv("dados_chicago_filtrados.csv")
+        df = pd.read_csv("chicago_crimes.csv")
         if 'Date' in df.columns:
             df['Date'] = pd.to_datetime(df['Date'])
         return df

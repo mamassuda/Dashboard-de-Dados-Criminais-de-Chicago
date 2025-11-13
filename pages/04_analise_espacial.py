@@ -29,7 +29,7 @@ st.sidebar.header("🎯 Controles de Análise")
 def load_data():
     # AJUSTE: Coloque o caminho real do seu arquivo
     try:
-        df = pd.read_csv("dados_chicago_filtrados.csv")
+        df = pd.read_csv("chicago_crimes.csv")
         return df
     except:
         st.error("Erro ao carregar dados. Verifique o caminho do arquivo.")
