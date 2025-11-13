@@ -16,11 +16,11 @@ st.set_page_config(
 def load_data():
     try:
         st.info("📊 Carregando base de dados completa...")
-        df = pd.read_csv('dados_chicago_filtrados.csv')
+        df = pd.read_csv('chicago_crimes.csv')
         st.success(f"✅ Dados carregados com sucesso! Total de registros: {len(df):,}")
         return df
     except FileNotFoundError:
-        st.error("❌ Arquivo 'dados_chicago_filtrados.csv' não encontrado.")
+        st.error("❌ Arquivo 'chicago_crimes.csv' não encontrado.")
         st.info("📝 Criando dataset de demonstração...")
         # Dataset mínimo para evitar erros
         return pd.DataFrame({
@@ -94,6 +94,6 @@ with st.sidebar.expander("ℹ️ Informações dos Dados"):
             if 'Primary Type' in df.columns:
                 st.write(f"🔒 Tipos de crime: {df['Primary Type'].nunique()}")
                 
-            st.write("💾 Fonte: dados_chicago_filtrados.csv")
+            st.write("💾 Fonte: chicago_crimes.csv")
     except Exception as e:
         st.write("⚠️ Carregando dados de demonstração")
