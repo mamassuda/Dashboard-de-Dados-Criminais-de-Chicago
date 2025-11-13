@@ -1,6 +1,7 @@
 # app.py - Página Inicial do Dashboard (Versão Otimizada)
 import streamlit as st
 import pandas as pd
+import numpy as np
 
 # Configuração da página
 st.set_page_config(
@@ -14,24 +15,29 @@ st.set_page_config(
 @st.cache_data
 def load_data():
     try:
-        # Primeiro tenta carregar a versão reduzida (mais rápida)
-        st.info("📊 Carregando versão otimizada dos dados...")
-        return pd.read_csv('dados_chicago_reduzido.csv')
+        st.info("📊 Carregando base de dados completa...")
+        df = pd.read_csv('dados_chicago_filtrados.csv')
+        st.success(f"✅ Dados carregados com sucesso! Total de registros: {len(df):,}")
+        return df
     except FileNotFoundError:
-        try:
-            # Fallback para o arquivo completo se o reduzido não existir
-            st.info("📊 Carregando base de dados completa...")
-            return pd.read_csv('dados_chicago_filtrados.csv')
-        except FileNotFoundError:
-            st.error("❌ Arquivo de dados não encontrado.")
-            return pd.DataFrame()
+        st.error("❌ Arquivo 'dados_chicago_filtrados.csv' não encontrado.")
+        st.info("📝 Criando dataset de demonstração...")
+        # Dataset mínimo para evitar erros
+        return pd.DataFrame({
+            'Data': pd.date_range('2023-01-01', periods=100),
+            'Primary Type': ['ROUBO', 'FURTO', 'AGRESSAO'] * 33,
+            'Community Area': ['LOOP', 'NORTH', 'SOUTH'] * 33,
+            'Hora': np.random.randint(0, 24, 100),
+            'Latitude': np.random.uniform(41.7, 42.0, 100),
+            'Longitude': np.random.uniform(-87.9, -87.6, 100)
+        })
 
 # Título principal
 st.title("🔍 Sistema de Análise de Crimes de Chicago")
 st.markdown("### Selecione uma das áreas abaixo para explorar os dados de criminalidade")
 st.markdown("---")
 
-# Criar os 4 cards interativos (versão simplificada sem CSS)
+# Criar os 4 cards interativos
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
@@ -69,16 +75,25 @@ Este sistema de análise permite explorar dados históricos de criminalidade de 
 **Desenvolvido por**: Matheus Henrique Massuda
 """)
 
-# Verificação de dados (opcional - remove se não quiser mostrar)
+# Verificação de dados
 st.sidebar.success("✅ Aplicação carregada com sucesso!")
 
-# Mostrar informações dos dados (apenas para debug)
+# Mostrar informações dos dados
 with st.sidebar.expander("ℹ️ Informações dos Dados"):
     try:
         df = load_data()
         if not df.empty:
             st.write(f"📈 Total de registros: {len(df):,}")
-            st.write(f"📅 Período dos dados: {df['Data'].min() if 'Data' in df.columns else 'N/A'} a {df['Data'].max() if 'Data' in df.columns else 'N/A'}")
-            st.write(f"💾 Fonte: {'dados_chicago_reduzido.csv' if 'dados_chicago_reduzido.csv' in str(load_data.cache_info()) else 'dados_chicago_filtrados.csv'}")
+            
+            # Verifica colunas disponíveis para mostrar informações
+            if 'Data' in df.columns:
+                st.write(f"📅 Período: {df['Data'].min()} a {df['Data'].max()}")
+            elif 'Date' in df.columns:
+                st.write(f"📅 Período: {df['Date'].min()} a {df['Date'].max()}")
+                
+            if 'Primary Type' in df.columns:
+                st.write(f"🔒 Tipos de crime: {df['Primary Type'].nunique()}")
+                
+            st.write("💾 Fonte: dados_chicago_filtrados.csv")
     except Exception as e:
-        st.write("⚠️ Dados ainda não disponíveis")
+        st.write("⚠️ Carregando dados de demonstração")
