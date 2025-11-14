@@ -115,8 +115,8 @@ def verificar_estrutura_arquivos():
     else:
         st.sidebar.error("❌ Pasta data_splits não encontrada")
 # Título principal
-st.title("🔍 Sistema de Análise de Crimes de Chicago")
-st.markdown("### Selecione uma das áreas abaixo para explorar os dados de criminalidade")
+st.title("🔍 Dashboard Interativo para Estudo dos Crimes em Chicago")
+st.markdown("### Selecione uma das ferramentas abaixo para explorar os dados de criminalidade")
 st.markdown("---")
 
 # Sidebar com seletor de período
@@ -159,7 +159,7 @@ col1, col2, col3, col4 = st.columns(4)
 
 with col1:
     st.markdown("### 📊 Análise Estatística")
-    st.markdown("Navegue, filte e explore o banco de dados completo de crimes")
+    st.markdown("Navegue, filtre e explore o banco de dados completo de crimes")
     if st.button("Acessar Análise Estatística", key="btn1", width='stretch'):
         st.switch_page("pages/01_analise_estatistica.py")
 
@@ -183,7 +183,7 @@ with col4:
 
 # Informações dos dados carregados
 st.markdown("---")
-st.markdown("### 📋 Informações do Dataset Carregado")
+st.markdown("### 📋 Informações dos Dados Carregados")
 
 if not st.session_state.df.empty:
     col_info1, col_info2, col_info3, col_info4 = st.columns(4)
@@ -196,7 +196,7 @@ if not st.session_state.df.empty:
             min_date = st.session_state.df['Date'].min()
             max_date = st.session_state.df['Date'].max()
             if pd.notna(min_date) and pd.notna(max_date):
-                date_range = f"{min_date.strftime('%Y-%m')} a {max_date.strftime('%Y-%m')}"
+                date_range = f"{min_date.strftime('%Y')} a {max_date.strftime('%Y')}"
                 st.metric("Período", date_range)
             else:
                 st.metric("Período", "Datas inválidas")
