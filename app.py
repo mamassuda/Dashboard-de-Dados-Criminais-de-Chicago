@@ -95,12 +95,14 @@ def verificar_estrutura_arquivos():
     if os.path.exists("data_splits"):
         arquivos = os.listdir("data_splits")
         csv_files = [f for f in arquivos if f.endswith('.csv')]
-        st.sidebar.caption("✅ Pasta data_splits encontrada")  # Texto menor
-        st.sidebar.caption(f"Arquivos CSV: {len(csv_files)}")  # Texto menor
+        st.sidebar.caption("✅ Pasta data_splits encontrada")
+        st.sidebar.caption(f"Arquivos CSV: {len(csv_files)}")
+        
+        # Lista os arquivos SEM marcadores
         for arquivo in sorted(csv_files):
-            st.sidebar.text(f"• {arquivo}")  # Texto bem pequeno
+            st.sidebar.text(arquivo)  # Isso exibe apenas o texto, sem marcadores
     else:
-        st.sidebar.caption("❌ Pasta data_splits não encontrada")  # Texto menor
+        st.sidebar.caption("❌ Pasta data_splits não encontrada")
         
 # Título principal
 st.title("🔍 Sistema de Análise de Crimes de Chicago")
