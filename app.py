@@ -101,7 +101,7 @@ def verificar_estrutura_arquivos():
             st.sidebar.text(f"• {arquivo}")  # Texto bem pequeno
     else:
         st.sidebar.caption("❌ Pasta data_splits não encontrada")  # Texto menor
-
+        
 # Título principal
 st.title("🔍 Sistema de Análise de Crimes de Chicago")
 st.markdown("### Selecione uma das áreas abaixo para explorar os dados de criminalidade")
