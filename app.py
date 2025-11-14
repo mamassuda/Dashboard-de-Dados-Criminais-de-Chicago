@@ -28,23 +28,31 @@ def load_data(years_range=None):
             st.info("data_splits/chicago_crimes_2014_2015.csv")
             st.info("data_splits/chicago_crimes_2016_2017.csv")
             st.info("... etc")
-            return pd.DataFrame()  # Retorna DataFrame vazio em vez de dados de exemplo
+            return pd.DataFrame()
 
         # Encontrar todos os arquivos de crimes na pasta data_splits
         arquivos_encontrados = glob.glob("data_splits/chicago_crimes_*.csv")
         
         if not arquivos_encontrados:
             st.error("❌ Nenhum arquivo de dados encontrado na pasta 'data_splits'")
-            return pd.DataFrame()  # Retorna DataFrame vazio
+            return pd.DataFrame()
         
-        st.info(f"📁 Encontrados {len(arquivos_encontrados)} arquivos na pasta data_splits")
+        # Barra de progresso para carregamento
+        progress_text = st.empty()
+        progress_bar = st.progress(0)
+        progress_text.text(f"📁 Encontrados {len(arquivos_encontrados)} arquivos - Iniciando carregamento...")
         
         # Carregar e combinar todos os arquivos
         partes = []
-        for arquivo in sorted(arquivos_encontrados):
+        total_registros = 0
+        
+        for i, arquivo in enumerate(sorted(arquivos_encontrados)):
             try:
+                # Atualizar progresso
+                progress_bar.progress((i + 1) / len(arquivos_encontrados))
+                progress_text.text(f"📁 Carregando arquivos... ({i+1}/{len(arquivos_encontrados)})")
+                
                 nome_arquivo = os.path.basename(arquivo)
-                st.write(f"📂 Carregando: {nome_arquivo}")
                 parte = pd.read_csv(arquivo)
                 
                 # Processar coluna de data
@@ -59,19 +67,23 @@ def load_data(years_range=None):
                     parte['Year'] = parte['Date'].dt.year
                 
                 partes.append(parte)
-                st.success(f"✅ {nome_arquivo} - {len(parte):,} registros")
+                total_registros += len(parte)
                 
             except Exception as e:
                 st.warning(f"⚠️ Erro ao carregar {arquivo}: {e}")
                 continue
         
+        # Limpar barra de progresso
+        progress_text.empty()
+        progress_bar.empty()
+        
         if not partes:
             st.error("❌ Nenhum arquivo foi carregado com sucesso")
-            return pd.DataFrame()  # Retorna DataFrame vazio
+            return pd.DataFrame()
         
         # Combinar todos os dados
         df_completo = pd.concat(partes, ignore_index=True)
-        st.success(f"🎉 Dataset completo carregado: {len(df_completo):,} registros")
+        st.success(f"✅ Todos os {len(partes)} arquivos carregados - Total: {len(df_completo):,} registros")
         
         # Aplicar filtro de período se especificado
         if years_range is not None:
@@ -85,8 +97,8 @@ def load_data(years_range=None):
         
     except Exception as e:
         st.error(f"❌ Erro inesperado ao carregar dados: {e}")
-        return pd.DataFrame()  # Retorna DataFrame vazio
-    
+        return pd.DataFrame()
+
 # Função para verificar estrutura de arquivos (para debug)
 def verificar_estrutura_arquivos():
     """Verifica se os arquivos estão no lugar certo"""
@@ -95,15 +107,13 @@ def verificar_estrutura_arquivos():
     if os.path.exists("data_splits"):
         arquivos = os.listdir("data_splits")
         csv_files = [f for f in arquivos if f.endswith('.csv')]
-        st.sidebar.caption("✅ Pasta data_splits encontrada")
-        st.sidebar.caption(f"Arquivos CSV: {len(csv_files)}")
         
-        # Lista os arquivos SEM marcadores
-        for arquivo in sorted(csv_files):
-            st.sidebar.text(arquivo)  # Isso exibe apenas o texto, sem marcadores
+        if csv_files:
+            st.sidebar.success(f"✅ Todos os {len(csv_files)} arquivos CSV carregados com sucesso")
+        else:
+            st.sidebar.warning("⚠️ Pasta encontrada, mas nenhum arquivo CSV")
     else:
-        st.sidebar.caption("❌ Pasta data_splits não encontrada")
-        
+        st.sidebar.error("❌ Pasta data_splits não encontrada")
 # Título principal
 st.title("🔍 Sistema de Análise de Crimes de Chicago")
 st.markdown("### Selecione uma das áreas abaixo para explorar os dados de criminalidade")
