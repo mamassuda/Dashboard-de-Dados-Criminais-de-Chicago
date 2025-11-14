@@ -21,13 +21,11 @@ def load_data(years_range=None):
     years_range: tuple (start_year, end_year) ou None para todos os dados
     """
     try:
+        st.info("🔍 Iniciando carregamento de dados...")
+        
         # Verificar se a pasta data_splits existe
         if not os.path.exists("data_splits"):
             st.error("❌ Pasta 'data_splits' não encontrada")
-            st.info("📁 Estrutura esperada:")
-            st.info("data_splits/chicago_crimes_2014_2015.csv")
-            st.info("data_splits/chicago_crimes_2016_2017.csv")
-            st.info("... etc")
             return pd.DataFrame()
 
         # Encontrar todos os arquivos de crimes na pasta data_splits
@@ -37,10 +35,11 @@ def load_data(years_range=None):
             st.error("❌ Nenhum arquivo de dados encontrado na pasta 'data_splits'")
             return pd.DataFrame()
         
+        st.info(f"📁 Encontrados {len(arquivos_encontrados)} arquivos")
+        
         # Barra de progresso para carregamento
         progress_text = st.empty()
         progress_bar = st.progress(0)
-        progress_text.text(f"📁 Encontrados {len(arquivos_encontrados)} arquivos - Iniciando carregamento...")
         
         # Carregar e combinar todos os arquivos
         partes = []
@@ -50,27 +49,41 @@ def load_data(years_range=None):
             try:
                 # Atualizar progresso
                 progress_bar.progress((i + 1) / len(arquivos_encontrados))
-                progress_text.text(f"📁 Carregando arquivos... ({i+1}/{len(arquivos_encontrados)})")
+                progress_text.text(f"📁 Carregando {os.path.basename(arquivo)}...")
                 
-                nome_arquivo = os.path.basename(arquivo)
+                # DEBUG: Mostrar arquivo atual
+                st.sidebar.write(f"🔄 Processando: {os.path.basename(arquivo)}")
+                
+                # Tentar carregar o arquivo
                 parte = pd.read_csv(arquivo)
+                st.sidebar.write(f"✅ {len(parte):,} registros carregados")
+                
+                # DEBUG: Mostrar colunas
+                st.sidebar.write(f"📊 Colunas: {list(parte.columns)}")
                 
                 # Processar coluna de data
                 if 'Date' in parte.columns:
+                    st.sidebar.write("🕒 Convertendo coluna 'Date'...")
                     parte['Date'] = pd.to_datetime(parte['Date'], errors='coerce')
                 elif 'Data' in parte.columns:
+                    st.sidebar.write("🕒 Convertendo coluna 'Data'...")
                     parte['Date'] = pd.to_datetime(parte['Data'], errors='coerce')
                     parte = parte.drop('Data', axis=1)
+                else:
+                    st.warning(f"⚠️ Nenhuma coluna de data encontrada em {os.path.basename(arquivo)}")
                 
                 # Adicionar coluna de ano se não existir
                 if 'Year' not in parte.columns and 'Date' in parte.columns:
                     parte['Year'] = parte['Date'].dt.year
+                    st.sidebar.write(f"📅 Ano extraído: {parte['Year'].min()}-{parte['Year'].max()}")
                 
                 partes.append(parte)
                 total_registros += len(parte)
+                st.sidebar.write(f"✅ Arquivo processado com sucesso")
                 
             except Exception as e:
-                st.warning(f"⚠️ Erro ao carregar {arquivo}: {e}")
+                st.error(f"❌ ERRO no arquivo {os.path.basename(arquivo)}: {str(e)}")
+                st.sidebar.error(f"❌ Falha em: {os.path.basename(arquivo)}")
                 continue
         
         # Limpar barra de progresso
@@ -82,13 +95,20 @@ def load_data(years_range=None):
             return pd.DataFrame()
         
         # Combinar todos os dados
-        df_completo = pd.concat(partes, ignore_index=True)
-        st.success(f"✅ Todos os {len(partes)} arquivos carregados - Total: {len(df_completo):,} registros")
+        st.sidebar.info("🔄 Combinando todos os arquivos...")
+        try:
+            df_completo = pd.concat(partes, ignore_index=True)
+            st.success(f"✅ Dataset combinado: {len(df_completo):,} registros")
+            st.sidebar.success(f"🎉 Total: {len(df_completo):,} registros")
+        except Exception as e:
+            st.error(f"❌ Erro ao combinar dados: {e}")
+            return pd.DataFrame()
         
         # Aplicar filtro de período se especificado
         if years_range is not None:
             start_year, end_year = years_range
             if 'Year' in df_completo.columns:
+                st.sidebar.info(f"🔍 Filtrando {start_year}-{end_year}...")
                 mask = (df_completo['Year'] >= start_year) & (df_completo['Year'] <= end_year)
                 df_completo = df_completo[mask].copy()
                 st.success(f"📅 Filtrado para {start_year}-{end_year}: {len(df_completo):,} registros")
@@ -96,8 +116,28 @@ def load_data(years_range=None):
         return df_completo
         
     except Exception as e:
-        st.error(f"❌ Erro inesperado ao carregar dados: {e}")
+        st.error(f"❌ Erro crítico em load_data: {e}")
+        import traceback
+        st.code(traceback.format_exc())
         return pd.DataFrame()
+
+def teste_carregamento_dados():
+    """Função para testar o carregamento de dados isoladamente"""
+    st.header("🧪 Teste de Carregamento de Dados")
+    
+    if st.button("🔍 Executar Teste de Carregamento"):
+        with st.spinner("Testando carregamento..."):
+            df = load_data()
+            
+            if df.empty:
+                st.error("❌ Falha no carregamento - DataFrame vazio")
+            else:
+                st.success(f"✅ Carregamento bem-sucedido! {len(df):,} registros")
+                st.write("📊 Informações do DataFrame:")
+                st.write(f"- Colunas: {list(df.columns)}")
+                st.write(f"- Período: {df['Year'].min()} - {df['Year'].max()}")
+                st.write(f"- Primeiras linhas:")
+                st.dataframe(df.head(3))
 
 # Função para verificar estrutura de arquivos (para debug)
 def verificar_estrutura_arquivos():
@@ -121,6 +161,10 @@ st.markdown("---")
 
 # Sidebar com seletor de período
 st.sidebar.header("📅 Configuração de Período")
+
+# Botão para testar carregamento de dados
+if st.sidebar.button("🧪 Testar Carregamento"):
+    teste_carregamento_dados()
 
 # Opções de períodos (baseado na divisão 2 em 2 anos)
 period_options = {
