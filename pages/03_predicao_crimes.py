@@ -1,4 +1,4 @@
-# 03_predicao_crimes.py - AMBOS MODELOS COM DADOS DIÁRIOS
+# 03_predicao_crimes.py - VERSÃO CORRIGIDA
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -10,6 +10,8 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import StandardScaler
 import holidays
 from datetime import timedelta
+import warnings
+warnings.filterwarnings('ignore')
 
 # Configuração da página
 st.set_page_config(page_title="Predição Crimes", layout="wide")
@@ -19,19 +21,88 @@ st.title("🔮 Predição Crimes")
 if st.button("← Voltar ao Início"):
     st.switch_page("app.py")
 
-# Carregar dados
-@st.cache_data
-def load_data():
-    try:
-        df = pd.read_csv("chicago_crimes.csv")
-        if 'Date' in df.columns:
-            df['Date'] = pd.to_datetime(df['Date'])
-        return df
-    except Exception as e:
-        st.error(f"Erro ao carregar dados: {e}")
-        return pd.DataFrame()
+# Função para criar dados de exemplo (fallback)
+def create_sample_data():
+    """Cria dataset de demonstração caso os arquivos principais não estejam disponíveis"""
+    st.info("📝 Criando dataset de demonstração...")
+    dates = pd.date_range('2014-01-01', periods=365*11, freq='D')  # 2014-2024
+    crimes = ['THEFT', 'BATTERY', 'CRIMINAL DAMAGE', 'NARCOTICS', 'ASSAULT', 'BURGLARY', 'ROBBERY']
+    
+    data = []
+    for date in dates:
+        daily_crimes = np.random.randint(50, 200)
+        for _ in range(daily_crimes):
+            data.append({
+                'Date': date,
+                'Primary Type': np.random.choice(crimes),
+                'District': np.random.choice(['001', '002', '003', '004', '005']),
+                'Latitude': np.random.uniform(41.7, 42.0),
+                'Longitude': np.random.uniform(-87.9, -87.6),
+                'Arrest': np.random.choice([True, False]),
+                'Year': date.year
+            })
+    
+    return pd.DataFrame(data)
 
-df = load_data()
+# Carregar dados - USANDO A MESMA LÓGICA DO APP PRINCIPAL
+@st.cache_data
+def load_data(years_range=None):
+    """
+    Carrega dados de Chicago crimes de forma otimizada.
+    years_range: tuple (start_year, end_year) ou None para dados recentes (2022-2024)
+    """
+    # Se não especificar anos, carrega os mais recentes (2022-2024)
+    if years_range is None:
+        years_range = (2022, 2024)
+    
+    start_year, end_year = years_range
+    
+    try:
+        # Tentar carregar arquivo específico do período
+        filename = f'chicago_crimes_{start_year}_{end_year}.csv'
+        st.info(f"📊 Carregando dados de {start_year}-{end_year}...")
+        df = pd.read_csv(filename)
+        
+    except FileNotFoundError:
+        st.warning(f"⚠️ Arquivo para {start_year}-{end_year} não encontrado. Tentando alternativas...")
+        
+        # Tentar carregar arquivo completo como fallback
+        try:
+            df = pd.read_csv('chicago_crimes.csv')
+            # Filtrar pelo período solicitado
+            if 'Date' in df.columns:
+                df['Date'] = pd.to_datetime(df['Date'])
+                df['Year'] = df['Date'].dt.year
+                mask = (df['Year'] >= start_year) & (df['Year'] <= end_year)
+                df = df[mask].copy()
+            elif 'Data' in df.columns:
+                df['Date'] = pd.to_datetime(df['Data'])
+                df = df.drop('Data', axis=1)
+                df['Year'] = df['Date'].dt.year
+                mask = (df['Year'] >= start_year) & (df['Year'] <= end_year)
+                df = df[mask].copy()
+                
+        except FileNotFoundError:
+            st.error("❌ Nenhum arquivo de dados encontrado.")
+            # Usar dados de exemplo como último recurso
+            return create_sample_data()
+    
+    # Garantir que a coluna de data está no formato correto
+    if 'Date' in df.columns:
+        df['Date'] = pd.to_datetime(df['Date'])
+    elif 'Data' in df.columns:
+        df['Date'] = pd.to_datetime(df['Data'])
+        df = df.drop('Data', axis=1)
+    
+    # Adicionar coluna de ano se não existir
+    if 'Year' not in df.columns:
+        df['Year'] = df['Date'].dt.year
+        
+    st.success(f"✅ Dados de {start_year}-{end_year} carregados! Total: {len(df):,} registros")
+    return df
+
+# Carregar dados
+df = load_data((2014, 2024))  # Carregar dados completos para análise
 
 if df.empty:
     st.warning("Dados não carregados. Verifique o arquivo.")
@@ -50,42 +121,54 @@ crime_types = sorted(df['Primary Type'].unique())
 selected_crime = st.sidebar.selectbox(
     "Tipo de Crime", 
     crime_types,
-    index=crime_types.index('ASSAULT') if 'ASSAULT' in crime_types else 0
+    index=crime_types.index('THEFT') if 'THEFT' in crime_types else 0
 )
 
 available_years = sorted(df['Year'].unique())
 
-# CONFIGURAÇÕES PARA AMBOS OS MODELOS (DIÁRIOS) - CORRIGIDO
+# CONFIGURAÇÕES PARA AMBOS OS MODELOS (DIÁRIOS)
 st.sidebar.header("📅 Configurações Temporais")
 
 # Ordenar anos disponíveis
 available_years_sorted = sorted(available_years)
 
-# Selecionar intervalo de treino
-if len(available_years_sorted) >= 2:
-    train_start = st.sidebar.selectbox(
-        "Início do Treino", 
-        available_years_sorted[:-1],
-        index=0
-    )
-    
-    train_end = st.sidebar.selectbox(
-        "Fim do Treino", 
-        [y for y in available_years_sorted if y > train_start],
-        index=0
-    )
-    
-    train_years = list(range(train_start, train_end + 1))
-    
-    # Ano de teste (após o treino)
-    available_test_years = [y for y in available_years_sorted if y > train_end]
-    test_year = st.sidebar.selectbox(
-        "Ano para Teste", 
-        available_test_years
-    )
-else:
-    st.warning("Não há anos suficientes para treino e teste")
+# Verificar se há anos suficientes
+if len(available_years_sorted) < 2:
+    st.error("❌ Não há anos suficientes no dataset para treino e teste")
     st.stop()
+
+# Selecionar intervalo de treino
+train_start = st.sidebar.selectbox(
+    "Início do Treino", 
+    available_years_sorted[:-1],
+    index=max(0, len(available_years_sorted) - 4)  # Default: 4 anos antes do último
+)
+
+# Filtrar anos possíveis para fim do treino
+possible_train_ends = [y for y in available_years_sorted if y > train_start]
+if not possible_train_ends:
+    st.error("❌ Não há anos disponíveis após o início do treino")
+    st.stop()
+
+train_end = st.sidebar.selectbox(
+    "Fim do Treino", 
+    possible_train_ends,
+    index=min(2, len(possible_train_ends) - 1)  # Default: 2 anos após início
+)
+
+train_years = list(range(train_start, train_end + 1))
+
+# Ano de teste (após o treino)
+available_test_years = [y for y in available_years_sorted if y > train_end]
+if not available_test_years:
+    st.error("❌ Não há anos disponíveis para teste após o período de treino")
+    st.stop()
+
+test_year = st.sidebar.selectbox(
+    "Ano para Teste", 
+    available_test_years,
+    index=0
+)
 
 # Configurações específicas por modelo
 if modelo_selecionado == "Prophet":
@@ -94,18 +177,17 @@ if modelo_selecionado == "Prophet":
 
 else:  # Random Forest
     st.sidebar.header("🔧 Parâmetros Random Forest")
-    n_estimators = st.sidebar.slider("Número de Árvores", 50, 500, 200)
-    lags_dias = st.sidebar.slider("Lags (dias históricos)", 7, 90, 30)
+    n_estimators = st.sidebar.slider("Número de Árvores", 50, 500, 100)
+    lags_dias = st.sidebar.slider("Lags (dias históricos)", 7, 90, 14)
     include_weekends = st.sidebar.checkbox("Incluir Features de Fim de Semana", value=True)
 
-# VERIFICAÇÃO DE SEGURANÇA - CORRIGIDO
+# VERIFICAÇÃO DE SEGURANÇA
 if not train_years or not test_year:
-    st.info("Selecione anos para treino e teste para continuar.")
+    st.error("❌ Selecione anos para treino e teste para continuar.")
     st.stop()
 
 # Verificar se há sobreposição de anos
-anos_treino_set = set(train_years)
-if test_year in anos_treino_set:
+if test_year in train_years:
     st.error("❌ O ano de teste não pode estar nos anos de treino!")
     st.stop()
 
@@ -117,54 +199,57 @@ if df_filtered.empty:
     st.error("❌ Não há dados para os anos selecionados!")
     st.stop()
 
-st.sidebar.success(f"✅ Dados carregados: {len(df_filtered)} registros")
-st.sidebar.write(f"📊 Período: {df_filtered['Date'].min().strftime('%Y-%m-%d')} a {df_filtered['Date'].max().strftime('%Y-%m-%d')}")
+st.sidebar.success(f"✅ Dados carregados: {len(df_filtered):,} registros")
+st.sidebar.write(f"📊 Período: {df_filtered['Date'].min().strftime('%d/%m/%Y')} a {df_filtered['Date'].max().strftime('%d/%m/%Y')}")
 
 # FUNÇÃO CORRIGIDA: Preparar e dividir dados
 def preparar_e_dividir_dados(df_filtrado, train_years, test_year):
     """Prepara dados diários e divide corretamente"""
+    # Garantir que temos dados
+    if df_filtrado.empty:
+        return pd.DataFrame(), pd.DataFrame(), None
+    
+    # Criar dados diários
     dados_diarios = df_filtrado.resample('D', on='Date').size().reset_index()
     dados_diarios.columns = ['ds', 'y']
     
     # Usar o final do último ano de treino como corte
     ultimo_ano_treino = max(train_years)
-    data_corte = f"{ultimo_ano_treino}-12-31"
-    data_corte = pd.to_datetime(data_corte)
+    data_corte = pd.Timestamp(f"{ultimo_ano_treino}-12-31")
+    
+    # Verificar se a data de corte está dentro dos dados
+    if data_corte < dados_diarios['ds'].min() or data_corte > dados_diarios['ds'].max():
+        st.error(f"❌ Data de corte {data_corte.strftime('%d/%m/%Y')} fora do range dos dados")
+        return pd.DataFrame(), pd.DataFrame(), None
     
     dados_treino = dados_diarios[dados_diarios['ds'] <= data_corte]
     dados_teste = dados_diarios[dados_diarios['ds'] > data_corte]
     
     return dados_treino, dados_teste, data_corte
 
-# PREPARAR DADOS DIÁRIOS (PARA AMBOS OS MODELOS) - CORRIGIDO
-def preparar_dados_diarios(df_filtrado):
-    """Prepara dados diários para ambos os modelos"""
-    dados_diarios = df_filtrado.resample('D', on='Date').size().reset_index()
-    dados_diarios.columns = ['ds', 'y']
-    return dados_diarios
-
 # Botão para executar previsão
 if st.button(f"🚀 Executar {modelo_selecionado} (Dados Diários)", type="primary"):
     
-    # Preparar dados (COMUM A AMBOS) - CORRIGIDO
+    # Preparar dados
     dados_treino, dados_teste, data_corte = preparar_e_dividir_dados(df_filtered, train_years, test_year)
     
     # Verificar se as divisões não estão vazias
-    if len(dados_treino) == 0:
-        st.error("❌ Nenhum dado encontrado para o período de treino!")
-        st.stop()
-
-    if len(dados_teste) == 0:
-        st.error("❌ Nenhum dado encontrado para o período de teste!")
+    if dados_treino.empty or dados_teste.empty:
+        st.error("❌ Não há dados suficientes para treino e teste com o período selecionado!")
         st.stop()
     
     st.write(f"📅 Dados Diários - Treino: {len(dados_treino)} dias | Teste: {len(dados_teste)} dias")
-    st.write(f"📊 Corte temporal: {data_corte.strftime('%Y-%m-%d')}")
+    st.write(f"📊 Corte temporal: {data_corte.strftime('%d/%m/%Y')}")
     
     if modelo_selecionado == "Prophet":
         with st.spinner("Treinando modelo Prophet..."):
             try:
-                from prophet import Prophet
+                # Tentar importar Prophet
+                try:
+                    from prophet import Prophet
+                except ImportError:
+                    st.error("❌ Biblioteca Prophet não instalada. Execute: pip install prophet")
+                    st.stop()
                 
                 # Configurar o modelo Prophet
                 model = Prophet(
@@ -182,17 +267,22 @@ if st.button(f"🚀 Executar {modelo_selecionado} (Dados Diários)", type="prima
                 model.fit(dados_treino)
                 
                 # Criar dataframe futuro para previsão
-                future = model.make_future_dataframe(periods=len(dados_teste), freq='D')
+                future = model.make_future_dataframe(periods=len(dados_teste), freq='D', include_history=False)
                 forecast = model.predict(future)
                 
                 # Combinar previsões com dados reais
-                forecast_test = forecast[forecast['ds'] >= data_corte][['ds', 'yhat', 'yhat_lower', 'yhat_upper']]
+                forecast_test = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']]
                 resultados = pd.merge(dados_teste, forecast_test, on='ds', how='left')
                 
                 # Calcular métricas
-                mape = mean_absolute_percentage_error(resultados['y'], resultados['yhat']) * 100
-                mae = mean_absolute_error(resultados['y'], resultados['yhat'])
-                mse = mean_squared_error(resultados['y'], resultados['yhat'])
+                valid_results = resultados.dropna()
+                if valid_results.empty:
+                    st.error("❌ Não foi possível calcular métricas - dados inválidos")
+                    st.stop()
+                
+                mape = mean_absolute_percentage_error(valid_results['y'], valid_results['yhat']) * 100
+                mae = mean_absolute_error(valid_results['y'], valid_results['yhat'])
+                mse = mean_squared_error(valid_results['y'], valid_results['yhat'])
                 rmse = np.sqrt(mse)
                 
                 # Exibir métricas
@@ -236,7 +326,8 @@ if st.button(f"🚀 Executar {modelo_selecionado} (Dados Diários)", type="prima
                     x=resultados['ds'], y=resultados['yhat_upper'],
                     mode='lines', name='Intervalo Superior',
                     line=dict(color='red', width=1, dash='dot'),
-                    opacity=0.3
+                    opacity=0.3,
+                    showlegend=False
                 ))
                 
                 fig.add_trace(go.Scatter(
@@ -244,7 +335,8 @@ if st.button(f"🚀 Executar {modelo_selecionado} (Dados Diários)", type="prima
                     mode='lines', name='Intervalo Inferior',
                     line=dict(color='red', width=1, dash='dot'),
                     opacity=0.3,
-                    fill='tonexty'
+                    fill='tonexty',
+                    showlegend=False
                 ))
                 
                 fig.update_layout(
@@ -263,16 +355,16 @@ if st.button(f"🚀 Executar {modelo_selecionado} (Dados Diários)", type="prima
                 try:
                     fig_components = model.plot_components(forecast)
                     st.pyplot(fig_components)
-                except:
-                    st.info("Visualização de componentes não disponível para esta configuração")
+                except Exception as e:
+                    st.info(f"Visualização de componentes não disponível: {e}")
                 
             except Exception as e:
-                st.error(f"Erro no Prophet: {e}")
+                st.error(f"❌ Erro no Prophet: {str(e)}")
                 
     else:  # RANDOM FOREST COM DADOS DIÁRIOS
         with st.spinner("Treinando Random Forest (dados diários)..."):
             try:
-                # 1. Preparar dados diários para Random Forest
+                # 1. Combinar dados de treino e teste
                 df_rf = pd.concat([dados_treino, dados_teste]).set_index('ds')
                 df_rf = df_rf.sort_index()
 
@@ -288,12 +380,12 @@ if st.button(f"🚀 Executar {modelo_selecionado} (Dados Diários)", type="prima
                     df_features['month'] = df_features.index.month
                     df_features['year'] = df_features.index.year
                     df_features['quarter'] = df_features.index.quarter
-                    df_features['week_of_year'] = df_features.index.isocalendar().week
+                    df_features['week_of_year'] = df_features.index.isocalendar().week.astype(int)
                     
                     # Fim de semana
                     df_features['is_weekend'] = (df_features.index.dayofweek >= 5).astype(int)
                     
-                    # Feriados (agora diários)
+                    # Feriados
                     us_holidays = holidays.US()
                     df_features['is_holiday'] = [date in us_holidays for date in df_features.index]
                     df_features['is_holiday'] = df_features['is_holiday'].astype(int)
@@ -315,8 +407,8 @@ if st.button(f"🚀 Executar {modelo_selecionado} (Dados Diários)", type="prima
                         df_features[f'lag_{lag}d'] = df_features['y'].shift(lag)
                     
                     # Médias móveis DIÁRIAS
-                    df_features['rolling_mean_7d'] = df_features['y'].rolling(window=7).mean()
-                    df_features['rolling_mean_30d'] = df_features['y'].rolling(window=30).mean()
+                    df_features['rolling_mean_7d'] = df_features['y'].rolling(window=7, min_periods=1).mean()
+                    df_features['rolling_mean_30d'] = df_features['y'].rolling(window=30, min_periods=1).mean()
                     
                     return df_features
 
@@ -326,14 +418,18 @@ if st.button(f"🚀 Executar {modelo_selecionado} (Dados Diários)", type="prima
                 # Remover linhas com NaN (devido aos lags)
                 crimes_com_features = crimes_com_features.dropna()
                 
+                if crimes_com_features.empty:
+                    st.error("❌ Não foi possível criar features - dados insuficientes após processamento")
+                    st.stop()
+                
                 st.write(f"📈 Features diárias criadas: {len(crimes_com_features.columns) - 1} variáveis")
 
-                # 3. Split treino/teste (já temos as datas)
+                # 3. Split treino/teste
                 train = crimes_com_features[crimes_com_features.index <= data_corte]
                 test = crimes_com_features[crimes_com_features.index > data_corte]
 
-                if len(train) == 0 or len(test) == 0:
-                    st.error("Não há dados suficientes para treino e teste com o período selecionado.")
+                if train.empty or test.empty:
+                    st.error("❌ Não há dados suficientes para treino e teste com o período selecionado.")
                     st.stop()
 
                 st.write(f"🎯 Treino: {len(train)} dias | Teste: {len(test)} dias")
@@ -419,29 +515,20 @@ if st.button(f"🚀 Executar {modelo_selecionado} (Dados Diários)", type="prima
                 
                 st.plotly_chart(fig, use_container_width=True)
 
-                # 10. Tabela de comparação (amostra de 15 dias)
+                # 10. Tabela de comparação
                 st.subheader("📈 Amostra de Previsões Diárias")
                 
                 comparacao = pd.DataFrame({
-                    'Data': results_df.index.strftime('%Y-%m-%d'),
+                    'Data': results_df.index.strftime('%d/%m/%Y'),
                     'Real': results_df['Real'],
                     'Previsto': results_df['Previsao'],
                     'Erro_Absoluto': np.abs(results_df['Real'] - results_df['Previsao']),
                     'Erro_Percentual': (np.abs(results_df['Real'] - results_df['Previsao']) / results_df['Real']) * 100
-                }).head(15)  # Mostrar apenas 15 primeiros dias
+                }).head(15)
 
                 st.dataframe(comparacao.round(2), use_container_width=True)
 
-                # 11. Estatísticas de performance
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("Erro Médio Absoluto", f"{comparacao['Erro_Absoluto'].mean():.1f} crimes/dia")
-                with col2:
-                    st.metric("Melhor Dia", f"{comparacao.loc[comparacao['Erro_Percentual'].idxmin(), 'Data']} ({comparacao['Erro_Percentual'].min():.1f}%)")
-                with col3:
-                    st.metric("Desvio Padrão Erro", f"{comparacao['Erro_Absoluto'].std():.1f}")
-
-                # 12. Importância das Features (top 10)
+                # 11. Importância das Features
                 st.subheader("🔍 Top 10 Features Mais Importantes")
                 
                 feature_importance = pd.DataFrame({
@@ -464,7 +551,7 @@ if st.button(f"🚀 Executar {modelo_selecionado} (Dados Diários)", type="prima
                 st.plotly_chart(fig_importance, use_container_width=True)
 
             except Exception as e:
-                st.error(f"Erro no Random Forest: {e}")
+                st.error(f"❌ Erro no Random Forest: {str(e)}")
 
 else:
     # Tela inicial - informações sobre os modelos
@@ -481,6 +568,7 @@ else:
     **Configuração Temporal:**
     - Treino: {min(train_years)} a {max(train_years)}
     - Teste: {test_year}
+    - Tipo de Crime: {selected_crime}
     """)
     
     if modelo_selecionado == "Prophet":
@@ -498,3 +586,7 @@ else:
         - Médias móveis de 7 e 30 dias
         - Identifica padrões não-lineares complexos
         """)
+
+# Footer
+st.markdown("---")
+st.markdown("**Módulo de Predição - Chicago Crime Analytics**")
