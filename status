@@ -1,0 +1,5 @@
+[33md7e0505[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Update requirements.txt to modify dependencies
+[33m3fbbab9[m Enhance crime analysis with sample data and error handling
+[33m91def93[m Revise crime prediction script for clarity and functionality
+[33mb5bcf91[m Enhance data loading and analysis features
+[33med1ca2f[m Enhance data loading and filtering logic
