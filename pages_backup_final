@@ -144,7 +144,7 @@ with col1:
             names=crime_counts.index,
             title="Top 10 Tipos de Crime"
         )
-        st.plotly_chart(fig_pizza, use_container_width=True)
+        st.plotly_chart(fig_pizza, width='stretch')
     else:
         st.info("Nenhum dado para exibir no gráfico.")
 
@@ -161,7 +161,7 @@ with col2:
             title="Distribuição de Crimes por Hora",
             labels={'x': 'Hora do Dia', 'y': 'Número de Crimes'}
         )
-        st.plotly_chart(fig_hora, use_container_width=True)
+        st.plotly_chart(fig_hora, width='stretch')
     else:
         st.info("Nenhum dado para exibir no gráfico.")
 
@@ -183,7 +183,7 @@ with tab1:
     start_idx = (page - 1) * page_size
     end_idx = start_idx + page_size
     
-    st.dataframe(df_filtrado.iloc[start_idx:end_idx], use_container_width=True)
+    st.dataframe(df_filtrado.iloc[start_idx:end_idx], width='stretch')
     
     st.write(f"Página {page} de {total_pages} | Registros {start_idx+1} a {min(end_idx, len(df_filtrado))}")
 
@@ -358,7 +358,7 @@ with tab1:
                 yaxis_title=f'Número de Crimes ({analysis_granularity.lower()})',
                 height=400
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
         
         with col2:
             st.subheader("📈 Métricas")
@@ -406,7 +406,7 @@ with tab2:
                 labels={'y': 'Número de Crimes'},
                 color_discrete_sequence=['#1f77b4']
             )
-            st.plotly_chart(fig_hist, use_container_width=True)
+            st.plotly_chart(fig_hist, width='stretch')
 
 with tab3:
     st.subheader("Análise de Padrões")
@@ -430,7 +430,7 @@ with tab3:
                 title='Média de Crimes por Dia da Semana',
                 labels={'x': 'Dia da Semana', 'y': 'Média de Crimes'}
             )
-            st.plotly_chart(fig_semanal, use_container_width=True)
+            st.plotly_chart(fig_semanal, width='stretch')
         
         with col2:
             media_mensal = daily_data.groupby('mes')['y'].mean()
@@ -444,7 +444,7 @@ with tab3:
                 labels={'x': 'Mês', 'y': 'Média de Crimes'},
                 markers=True
             )
-            st.plotly_chart(fig_mensal, use_container_width=True)
+            st.plotly_chart(fig_mensal, width='stretch')
         
         # SEÇÃO CORRIGIDA - Análise de Outliers
         st.subheader("🚨 Análise de Valores Atípicos")
@@ -468,7 +468,7 @@ with tab3:
                 top_dias = outliers.nlargest(5, 'y')[['ds', 'y']].copy()
                 top_dias['ds'] = top_dias['ds'].dt.strftime('%Y-%m-%d')
                 top_dias = top_dias.rename(columns={'ds': 'Data', 'y': 'Crimes'})  # CORRIGIDO
-                st.dataframe(top_dias.reset_index(drop=True), use_container_width=True)
+                st.dataframe(top_dias.reset_index(drop=True), width='stretch')
             else:
                 st.info("Nenhum outlier detectado nos dados filtrados")
 
@@ -484,7 +484,7 @@ with tab3:
             color_discrete_sequence=['#1f77b4']  # CORRIGIDO
         )
 
-        st.plotly_chart(fig_dist, use_container_width=True)
+        st.plotly_chart(fig_dist, width='stretch')
 
 # Recomendações para Modelagem
 st.markdown("---")
@@ -776,7 +776,7 @@ if st.button(f"🚀 Executar {modelo_selecionado} (Dados Diários)", type="prima
                     height=500
                 )
                 
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
                 
                 # Componentes do Prophet
                 st.subheader("🔍 Componentes do Modelo Prophet")
@@ -938,7 +938,7 @@ if st.button(f"🚀 Executar {modelo_selecionado} (Dados Diários)", type="prima
                     height=500
                 )
                 
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
 
                 # 10. Tabela de comparação (amostra de 15 dias)
                 st.subheader("📈 Amostra de Previsões Diárias")
@@ -951,7 +951,7 @@ if st.button(f"🚀 Executar {modelo_selecionado} (Dados Diários)", type="prima
                     'Erro_Percentual': (np.abs(results_df['Real'] - results_df['Previsao']) / results_df['Real']) * 100
                 }).head(15)  # Mostrar apenas 15 primeiros dias
 
-                st.dataframe(comparacao.round(2), use_container_width=True)
+                st.dataframe(comparacao.round(2), width='stretch')
 
                 # 11. Estatísticas de performance
                 col1, col2, col3 = st.columns(3)
@@ -982,7 +982,7 @@ if st.button(f"🚀 Executar {modelo_selecionado} (Dados Diários)", type="prima
                     yaxis_title='Features',
                     height=400
                 )
-                st.plotly_chart(fig_importance, use_container_width=True)
+                st.plotly_chart(fig_importance, width='stretch')
 
             except Exception as e:
                 st.error(f"Erro no Random Forest: {e}")
@@ -1216,7 +1216,7 @@ with tab2:
                 proportion_df = proportion_df.rename(
                     columns={'District': 'Distrito', 0: 'Proporção (%)'}
                 )
-                st.dataframe(proportion_df, use_container_width=True)
+                st.dataframe(proportion_df, width='stretch')
             
             # Gráfico
             st.subheader("📊 Distribuição por Distrito")

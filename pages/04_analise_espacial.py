@@ -252,13 +252,13 @@ def main():
                 st.markdown("**Contagem Absoluta (Top 15)**")
                 top_districts = crime_counts_by_district.head(15).reset_index()
                 top_districts.columns = ['Distrito', 'Nº de Crimes']
-                st.dataframe(top_districts, use_container_width=True)
+                st.dataframe(top_districts, width='stretch')
             
             with col4:
                 st.markdown("**Proporção (%) do Total (Top 15)**")
                 proportion_df = crime_proportion_by_district.head(15).round(2).reset_index()
                 proportion_df.columns = ['Distrito', 'Proporção (%)']
-                st.dataframe(proportion_df, use_container_width=True)
+                st.dataframe(proportion_df, width='stretch')
             
             # Gráfico
             st.subheader("📊 Distribuição por Distrito")
@@ -360,7 +360,7 @@ def main():
                         cluster_stats = cluster_stats.sort_values('N_Pontos', ascending=False)
                         
                         st.markdown("**Estatísticas por Cluster:**")
-                        st.dataframe(cluster_stats, use_container_width=True)
+                        st.dataframe(cluster_stats, width='stretch')
                     
                 except Exception as e:
                     st.error(f"❌ Erro na análise de clusters: {e}")

@@ -138,7 +138,7 @@ def main():
                         yaxis_title=f'Número de Crimes ({analysis_granularity.lower()})',
                         height=400
                     )
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width='stretch')
                 
                 with col2:
                     st.subheader("📈 Métricas")
@@ -189,7 +189,7 @@ def main():
                         labels={'y': 'Número de Crimes'},
                         color_discrete_sequence=['#1f77b4']
                     )
-                    st.plotly_chart(fig_hist, use_container_width=True)
+                    st.plotly_chart(fig_hist, width='stretch')
 
     with tab3:
         st.subheader("Análise de Padrões")
@@ -224,7 +224,7 @@ def main():
                         title='Média de Crimes por Dia da Semana',
                         labels={'x': 'Dia da Semana', 'y': 'Média de Crimes'}
                     )
-                    st.plotly_chart(fig_semanal, use_container_width=True)
+                    st.plotly_chart(fig_semanal, width='stretch')
                 
                 with col2:
                     # Média por mês
@@ -239,7 +239,7 @@ def main():
                         labels={'x': 'Mês', 'y': 'Média de Crimes'},
                         markers=True
                     )
-                    st.plotly_chart(fig_mensal, use_container_width=True)
+                    st.plotly_chart(fig_mensal, width='stretch')
                 
                 # SEÇÃO CORRIGIDA - Análise de Outliers
                 st.subheader("🚨 Análise de Valores Atípicos")
@@ -263,7 +263,7 @@ def main():
                         top_dias = outliers.nlargest(5, 'y')[['ds', 'y']].copy()
                         top_dias['ds'] = top_dias['ds'].dt.strftime('%d/%m/%Y')
                         top_dias = top_dias.rename(columns={'ds': 'Data', 'y': 'Crimes'})
-                        st.dataframe(top_dias.reset_index(drop=True), use_container_width=True)
+                        st.dataframe(top_dias.reset_index(drop=True), width='stretch')
                     else:
                         st.info("Nenhum outlier detectado nos dados filtrados")
                 
@@ -280,7 +280,7 @@ def main():
                 )
                 fig_dist.update_layout(yaxis_title='Frequência')
                 
-                st.plotly_chart(fig_dist, use_container_width=True)
+                st.plotly_chart(fig_dist, width='stretch')
 
     # Recomendações para Modelagem
     st.markdown("---")

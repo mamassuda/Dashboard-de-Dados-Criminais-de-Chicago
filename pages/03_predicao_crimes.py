@@ -277,7 +277,7 @@ def main():
                         height=500
                     )
                     
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width='stretch')
                     
                     # Componentes do Prophet
                     st.subheader("🔍 Componentes do Modelo Prophet")
@@ -443,7 +443,7 @@ def main():
                         height=500
                     )
                     
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width='stretch')
 
                     # 10. Tabela de comparação
                     st.subheader("📈 Amostra de Previsões Diárias")
@@ -456,7 +456,7 @@ def main():
                         'Erro_Percentual': (np.abs(results_df['Real'] - results_df['Previsao']) / results_df['Real']) * 100
                     }).head(15)
 
-                    st.dataframe(comparacao.round(2), use_container_width=True)
+                    st.dataframe(comparacao.round(2), width='stretch')
 
                     # 11. Importância das Features
                     st.subheader("🔍 Top 10 Features Mais Importantes")
@@ -478,7 +478,7 @@ def main():
                         yaxis_title='Features',
                         height=400
                     )
-                    st.plotly_chart(fig_importance, use_container_width=True)
+                    st.plotly_chart(fig_importance, width='stretch')
 
                 except Exception as e:
                     st.error(f"❌ Erro no Random Forest: {str(e)}")

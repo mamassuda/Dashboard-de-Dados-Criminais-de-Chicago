@@ -172,7 +172,7 @@ def main():
                 names=crime_counts.index,
                 title="Gráfico de pizza dos tipos de crimes selecionados",
             )
-            st.plotly_chart(fig_pizza, use_container_width=True)
+            st.plotly_chart(fig_pizza, width='stretch')
         else:
             st.info("Nenhum dado para exibir no gráfico.")
 
@@ -191,7 +191,7 @@ def main():
                 title="Distribuição de Crimes por Hora",
                 labels={'x': 'Hora do Dia', 'y': 'Número de Crimes'}
             )
-            st.plotly_chart(fig_hora, use_container_width=True)
+            st.plotly_chart(fig_hora, width='stretch')
         else:
             st.info("Nenhum dado para exibir no gráfico.")
 
@@ -214,7 +214,7 @@ def main():
             start_idx = (page - 1) * page_size
             end_idx = min(start_idx + page_size, len(df_filtrado))
             
-            st.dataframe(df_filtrado.iloc[start_idx:end_idx], use_container_width=True)
+            st.dataframe(df_filtrado.iloc[start_idx:end_idx], width='stretch')
             
             st.write(f"Página {page} de {total_pages} | Registros {start_idx+1} a {end_idx}")
         else:
