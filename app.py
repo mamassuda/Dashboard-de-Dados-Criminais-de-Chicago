@@ -115,7 +115,7 @@ def verificar_estrutura_arquivos():
     else:
         st.sidebar.error("❌ Pasta data_splits não encontrada")
 # Título principal
-st.title("🔍 Dashboard Interativo para Estudo dos Crimes em Chicago")
+st.title("🔍 Dashboard para Estudo dos Crimes em Chicago")
 st.markdown("### Selecione uma das ferramentas abaixo para explorar os dados de criminalidade")
 st.markdown("---")
 
