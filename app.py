@@ -44,7 +44,7 @@ def load_data(years_range=None):
     """
     # Se não especificar anos, carrega os mais recentes (2022-2024)
     if years_range is None:
-        years_range = (2022, 2024)
+        years_range = (2020, 2024)
     
     start_year, end_year = years_range
     
