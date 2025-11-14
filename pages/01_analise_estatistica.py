@@ -170,7 +170,7 @@ def main():
             fig_pizza = px.pie(
                 values=crime_counts.values,
                 names=crime_counts.index,
-                title="Top 10 Tipos de Crime"
+                title="Gráfico de pizza dos tipos de crimes selecionados",
             )
             st.plotly_chart(fig_pizza, use_container_width=True)
         else:
@@ -283,7 +283,7 @@ def main():
 
     # Footer
     st.markdown("---")
-    st.markdown("*Módulo de Exploração de Dados - Chicago Crime Analytics*")
+    st.markdown("*Módulo de Análise Estatística de Dados - Chicago Crime Analytics*")
 
 if __name__ == "__main__":
     main()
