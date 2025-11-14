@@ -94,7 +94,7 @@ def load_data(years_range=None):
             st.error("❌ Nenhum arquivo foi carregado com sucesso")
             return pd.DataFrame()
         
-        # Combinar todos os dados
+        # Combinar todos os dados - CORREÇÃO AQUI
         st.sidebar.info("🔄 Combinando todos os arquivos...")
         try:
             df_completo = pd.concat(partes, ignore_index=True)
@@ -120,40 +120,7 @@ def load_data(years_range=None):
         import traceback
         st.code(traceback.format_exc())
         return pd.DataFrame()
-
-def teste_carregamento_dados():
-    """Função para testar o carregamento de dados isoladamente"""
-    st.header("🧪 Teste de Carregamento de Dados")
     
-    if st.button("🔍 Executar Teste de Carregamento"):
-        with st.spinner("Testando carregamento..."):
-            df = load_data()
-            
-            if df.empty:
-                st.error("❌ Falha no carregamento - DataFrame vazio")
-            else:
-                st.success(f"✅ Carregamento bem-sucedido! {len(df):,} registros")
-                st.write("📊 Informações do DataFrame:")
-                st.write(f"- Colunas: {list(df.columns)}")
-                st.write(f"- Período: {df['Year'].min()} - {df['Year'].max()}")
-                st.write(f"- Primeiras linhas:")
-                st.dataframe(df.head(3))
-
-# Função para verificar estrutura de arquivos (para debug)
-def verificar_estrutura_arquivos():
-    """Verifica se os arquivos estão no lugar certo"""
-    st.sidebar.header("🔍 Verificação de Arquivos")
-    
-    if os.path.exists("data_splits"):
-        arquivos = os.listdir("data_splits")
-        csv_files = [f for f in arquivos if f.endswith('.csv')]
-        
-        if csv_files:
-            st.sidebar.success(f"✅ Todos os {len(csv_files)} arquivos CSV carregados com sucesso")
-        else:
-            st.sidebar.warning("⚠️ Pasta encontrada, mas nenhum arquivo CSV")
-    else:
-        st.sidebar.error("❌ Pasta data_splits não encontrada")
 # Título principal
 st.title("🔍 Dashboard para Estudo dos Crimes em Chicago")
 st.markdown("### Selecione uma das ferramentas abaixo para explorar os dados de criminalidade")
@@ -161,10 +128,6 @@ st.markdown("---")
 
 # Sidebar com seletor de período
 st.sidebar.header("📅 Configuração de Período")
-
-# Botão para testar carregamento de dados
-if st.sidebar.button("🧪 Testar Carregamento"):
-    teste_carregamento_dados()
 
 # Opções de períodos (baseado na divisão 2 em 2 anos)
 period_options = {
@@ -184,8 +147,6 @@ selected_period_label = st.sidebar.selectbox(
 # Obter o range de anos selecionado
 selected_period = period_options[selected_period_label]
 
-# Verificação de arquivos (para debug)
-verificar_estrutura_arquivos()
 
 # Carregar dados uma vez para toda a aplicação
 if 'df' not in st.session_state:
