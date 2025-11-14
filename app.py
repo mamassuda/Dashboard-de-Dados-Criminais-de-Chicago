@@ -1,7 +1,9 @@
-# app.py - Página Inicial do Dashboard (Versão Otimizada com Divisão por Anos)
+# app.py - Página Inicial do Dashboard (Versão Corrigida)
 import streamlit as st
 import pandas as pd
 import numpy as np
+import os
+import glob
 
 # Configuração da página
 st.set_page_config(
@@ -11,85 +13,94 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Função para criar dados de exemplo (fallback)
-def create_sample_data():
-    """Cria dataset de demonstração caso os arquivos principais não estejam disponíveis"""
-    st.info("📝 Criando dataset de demonstração...")
-    dates = pd.date_range('2020-01-01', periods=365*3, freq='D')
-    crimes = ['THEFT', 'BATTERY', 'CRIMINAL DAMAGE', 'NARCOTICS', 'ASSAULT', 'BURGLARY', 'ROBBERY']
-    districts = ['001', '002', '003', '004', '005', '006', '007', '008', '009', '010']
-    
-    data = []
-    for date in dates:
-        daily_crimes = np.random.randint(50, 200)
-        for _ in range(daily_crimes):
-            data.append({
-                'Date': date,
-                'Primary Type': np.random.choice(crimes),
-                'District': np.random.choice(districts),
-                'Latitude': np.random.uniform(41.7, 42.0),
-                'Longitude': np.random.uniform(-87.9, -87.6),
-                'Arrest': np.random.choice([True, False]),
-                'Year': date.year
-            })
-    
-    return pd.DataFrame(data)
-
-# Função otimizada para carregar dados com divisão por anos
+# Função corrigida para carregar dados da pasta data_splits
 @st.cache_data
 def load_data(years_range=None):
     """
-    Carrega dados de Chicago crimes de forma otimizada.
-    years_range: tuple (start_year, end_year) ou None para dados recentes
+    Carrega dados de Chicago crimes da pasta data_splits
+    years_range: tuple (start_year, end_year) ou None para todos os dados
     """
-    # Se não especificar anos, carrega os mais recentes (2022-2024)
-    if years_range is None:
-        years_range = (2020, 2024)
-    
-    start_year, end_year = years_range
-    
     try:
-        # Tentar carregar arquivo específico do período
-        filename = f'chicago_crimes_{start_year}_{end_year}.csv'
-        st.info(f"📊 Carregando dados de {start_year}-{end_year}...")
-        df = pd.read_csv(filename)
+        # Verificar se a pasta data_splits existe
+        if not os.path.exists("data_splits"):
+            st.error("❌ Pasta 'data_splits' não encontrada")
+            st.info("📁 Estrutura esperada:")
+            st.info("data_splits/chicago_crimes_2014_2015.csv")
+            st.info("data_splits/chicago_crimes_2016_2017.csv")
+            st.info("... etc")
+            return pd.DataFrame()  # Retorna DataFrame vazio em vez de dados de exemplo
+
+        # Encontrar todos os arquivos de crimes na pasta data_splits
+        arquivos_encontrados = glob.glob("data_splits/chicago_crimes_*.csv")
         
-        # Garantir que a coluna de data está no formato correto
-        if 'Date' in df.columns:
-            df['Date'] = pd.to_datetime(df['Date'])
-        elif 'Data' in df.columns:
-            df['Date'] = pd.to_datetime(df['Data'])
-            df = df.drop('Data', axis=1)
+        if not arquivos_encontrados:
+            st.error("❌ Nenhum arquivo de dados encontrado na pasta 'data_splits'")
+            return pd.DataFrame()  # Retorna DataFrame vazio
         
-        # Adicionar coluna de ano se não existir
-        if 'Year' not in df.columns:
-            df['Year'] = df['Date'].dt.year
-            
-        st.success(f"✅ Dados de {start_year}-{end_year} carregados! Total: {len(df):,} registros")
-        return df
+        st.info(f"📁 Encontrados {len(arquivos_encontrados)} arquivos na pasta data_splits")
         
-    except FileNotFoundError:
-        st.warning(f"⚠️ Arquivo para {start_year}-{end_year} não encontrado. Tentando alternativas...")
-        
-        # Tentar carregar arquivo completo como fallback
-        try:
-            df = pd.read_csv('chicago_crimes.csv')
-            if 'Date' in df.columns:
-                df['Date'] = pd.to_datetime(df['Date'])
-                df['Year'] = df['Date'].dt.year
+        # Carregar e combinar todos os arquivos
+        partes = []
+        for arquivo in sorted(arquivos_encontrados):
+            try:
+                nome_arquivo = os.path.basename(arquivo)
+                st.write(f"📂 Carregando: {nome_arquivo}")
+                parte = pd.read_csv(arquivo)
                 
-                # Filtrar pelo período solicitado
-                if years_range:
-                    mask = (df['Year'] >= start_year) & (df['Year'] <= end_year)
-                    df = df[mask].copy()
-                    
-            st.success(f"✅ Dados carregados do arquivo completo! Período {start_year}-{end_year}: {len(df):,} registros")
-            return df
-            
-        except FileNotFoundError:
-            st.error("❌ Nenhum arquivo de dados encontrado.")
-            # Usar dados de exemplo como último recurso
-            return create_sample_data()
+                # Processar coluna de data
+                if 'Date' in parte.columns:
+                    parte['Date'] = pd.to_datetime(parte['Date'], errors='coerce')
+                elif 'Data' in parte.columns:
+                    parte['Date'] = pd.to_datetime(parte['Data'], errors='coerce')
+                    parte = parte.drop('Data', axis=1)
+                
+                # Adicionar coluna de ano se não existir
+                if 'Year' not in parte.columns and 'Date' in parte.columns:
+                    parte['Year'] = parte['Date'].dt.year
+                
+                partes.append(parte)
+                st.success(f"✅ {nome_arquivo} - {len(parte):,} registros")
+                
+            except Exception as e:
+                st.warning(f"⚠️ Erro ao carregar {arquivo}: {e}")
+                continue
+        
+        if not partes:
+            st.error("❌ Nenhum arquivo foi carregado com sucesso")
+            return pd.DataFrame()  # Retorna DataFrame vazio
+        
+        # Combinar todos os dados
+        df_completo = pd.concat(partes, ignore_index=True)
+        st.success(f"🎉 Dataset completo carregado: {len(df_completo):,} registros")
+        
+        # Aplicar filtro de período se especificado
+        if years_range is not None:
+            start_year, end_year = years_range
+            if 'Year' in df_completo.columns:
+                mask = (df_completo['Year'] >= start_year) & (df_completo['Year'] <= end_year)
+                df_completo = df_completo[mask].copy()
+                st.success(f"📅 Filtrado para {start_year}-{end_year}: {len(df_completo):,} registros")
+        
+        return df_completo
+        
+    except Exception as e:
+        st.error(f"❌ Erro inesperado ao carregar dados: {e}")
+        return pd.DataFrame()  # Retorna DataFrame vazio
+    
+# Função para verificar estrutura de arquivos (para debug)
+def verificar_estrutura_arquivos():
+    """Verifica se os arquivos estão no lugar certo"""
+    st.sidebar.header("🔍 Verificação de Arquivos")
+    
+    if os.path.exists("data_splits"):
+        arquivos = os.listdir("data_splits")
+        csv_files = [f for f in arquivos if f.endswith('.csv')]
+        st.sidebar.success(f"✅ Pasta data_splits encontrada")
+        st.sidebar.write(f"Arquivos CSV: {len(csv_files)}")
+        for arquivo in sorted(csv_files):
+            st.sidebar.write(f"• {arquivo}")
+    else:
+        st.sidebar.error("❌ Pasta data_splits não encontrada")
 
 # Título principal
 st.title("🔍 Sistema de Análise de Crimes de Chicago")
@@ -117,13 +128,18 @@ selected_period_label = st.sidebar.selectbox(
 # Obter o range de anos selecionado
 selected_period = period_options[selected_period_label]
 
+# Verificação de arquivos (para debug)
+verificar_estrutura_arquivos()
+
 # Carregar dados uma vez para toda a aplicação
 if 'df' not in st.session_state:
-    st.session_state.df = load_data(selected_period)
+    with st.spinner("Carregando dados de 2014-2024..."):
+        st.session_state.df = load_data(selected_period)
 
 # Atualizar dados se o período mudar
 if st.sidebar.button("🔄 Atualizar Dados"):
-    st.session_state.df = load_data(selected_period)
+    with st.spinner("Atualizando dados..."):
+        st.session_state.df = load_data(selected_period)
     st.rerun()
 
 # Criar os 4 cards interativos
@@ -164,9 +180,14 @@ if not st.session_state.df.empty:
         st.metric("Total de Registros", f"{len(st.session_state.df):,}")
     
     with col_info2:
-        if 'Date' in st.session_state.df.columns:
-            date_range = f"{st.session_state.df['Date'].min().strftime('%Y-%m')} a {st.session_state.df['Date'].max().strftime('%Y-%m')}"
-            st.metric("Período", date_range)
+        if 'Date' in st.session_state.df.columns and not st.session_state.df['Date'].isna().all():
+            min_date = st.session_state.df['Date'].min()
+            max_date = st.session_state.df['Date'].max()
+            if pd.notna(min_date) and pd.notna(max_date):
+                date_range = f"{min_date.strftime('%Y-%m')} a {max_date.strftime('%Y-%m')}"
+                st.metric("Período", date_range)
+            else:
+                st.metric("Período", "Datas inválidas")
         else:
             st.metric("Período", "Não disponível")
     
@@ -206,8 +227,13 @@ with st.sidebar.expander("ℹ️ Detalhes dos Dados Carregados"):
     if not df.empty:
         st.write(f"📈 **Total de registros**: {len(df):,}")
         
-        if 'Date' in df.columns:
-            st.write(f"📅 **Período**: {df['Date'].min().strftime('%d/%m/%Y')} a {df['Date'].max().strftime('%d/%m/%Y')}")
+        if 'Date' in df.columns and not df['Date'].isna().all():
+            min_date = df['Date'].min()
+            max_date = df['Date'].max()
+            if pd.notna(min_date) and pd.notna(max_date):
+                st.write(f"📅 **Período**: {min_date.strftime('%d/%m/%Y')} a {max_date.strftime('%d/%m/%Y')}")
+            else:
+                st.write("📅 **Período**: Datas inválidas")
             
         if 'Primary Type' in df.columns:
             top_crimes = df['Primary Type'].value_counts().head(3)
